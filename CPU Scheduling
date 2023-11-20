@@ -1,0 +1,250 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Process{
+    int pid;
+    int burst;
+    int arrival;
+    int remaining;
+    int exit;
+};
+
+struct Process createProcess(int pid, int burst, int arrival){
+    struct Process p;
+    p.pid = pid;
+    p.burst = burst;
+    p.arrival = arrival;
+    p.remaining = burst;
+    p.exit = -1;
+    return p;
+}
+
+struct Process *processes;
+int size;
+
+void initProcesses(){
+    size = 5;
+    struct Process *temp = malloc(sizeof(struct Process) * size);
+
+    struct Process proc[size];
+    proc[3] = createProcess(4, 3, 0);
+    proc[2] = createProcess(3, 8, 1);
+    proc[0] = createProcess(1, 6, 2);
+    proc[4] = createProcess(5, 4, 4);
+    proc[1] = createProcess(2, 2, 5);
+
+    for (int i = 0; i < size; i++) {
+        temp[i] = proc[i];
+    }
+
+    processes = temp;
+
+}
+
+int totalTime(){
+    int sum = 0;
+    for (int i = 0; i < size; i++) {
+        sum += processes[i].burst;
+    }
+    return sum;
+}
+
+void sortProcesses(){
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            if(processes[j].arrival > processes[j+1].arrival){
+                struct Process temp = processes[j];
+                processes[j] = processes[j+1];
+                processes[j+1] = temp;
+            }
+        }
+    }
+}
+
+int *gantt;
+int totalSlots;
+
+void initGantt(){
+    totalSlots = totalTime();
+    int *temp = malloc(sizeof(int) * totalSlots);
+    for (int i = 0; i < totalTime(); ++i) {
+        temp[i] = -1;
+    }
+    gantt = temp;
+}
+
+int getNextShortestJob(int timeSlice){
+    int min = 99999, index = -1;
+    for (int i = 0; i < size; i++) {
+        if(processes[i].remaining < min &&
+        processes[i].arrival <= timeSlice &&
+        processes[i].remaining > 0){
+            min = processes[i].remaining;
+            index = i;
+        }
+    }
+    return index;
+}
+
+void printGantt(int it, int index){
+    it++;
+    printf("-----------------------------------------------\n");
+    printf("iteration : %d, pid : %d, remaining : %d\n", it, processes[index].pid, processes[index].remaining);
+    printf("Gantt : ");
+    for (int i = 0; i < totalSlots; i++) {
+        if (gantt[i] < 0)
+            printf("%d%s", gantt[i]," ");
+        else
+            printf("%d%s", gantt[i],"  ");
+
+    }
+    printf("\nTime  : ");
+    for (int i = 0; i < totalSlots; i++) {
+        if( gantt[i] < 0)
+            printf("%d%s", i," ");
+        else
+            printf("%d%s", i,"  ");
+    }
+    printf("\n-----------------------------------------------\n");
+
+}
+
+void printProcesses(){
+    printf("-----------------------------------------------\n");
+    printf("iteration : %d, pid : %d, remaining : %d\n");
+    printf("Processes : ");
+    for (int i = 0; i < size; i++) {
+        printf("\n-----------------------------------------------\n");
+
+        printf("pid : %d \n", processes[i].pid);
+        printf("arrival : %d \n", processes[i].arrival);
+        printf("burst : %d \n", processes[i].burst);
+        printf("remaining : %d \n", processes[i].remaining);
+        printf("exit : %d \n", processes[i].exit);
+        printf("\n-----------------------------------------------\n");
+
+    }
+    printf("\n-----------------------------------------------\n");
+}
+
+void SJFPreemptive(){
+    int index = -1;
+    for (int time = 0; time < totalTime(); time++) {
+        index = getNextShortestJob(time);
+            gantt[time] = processes[index].pid;
+            processes[index].remaining--;
+            printGantt(time, index);
+            if(processes[index].remaining == 0){
+                processes[index].exit = time + 1;
+            }
+    }
+    printProcesses();
+}
+
+void SJFNonPreemptive(){
+        int index = -1;
+        for (int time = 0; time < totalTime(); time++) {
+            if(processes[index].remaining != 0 && index != -1){
+                gantt[time] = processes[index].pid;
+                processes[index].remaining--;
+                printGantt(time, index);
+                if(processes[index].remaining == 0){
+                    processes[index].exit = time + 1;
+                }
+            }
+            else{
+                index = getNextShortestJob(time);
+                gantt[time] = processes[index].pid;
+                processes[index].remaining--;
+                printGantt(time, index);
+            }
+            printProcesses();
+    }
+}
+
+void calcMetrics(){
+    int turnAroundTime[size];
+    int waitingTime[size];
+
+    for (int i = 0; i < size; i++) {
+        turnAroundTime[i] = processes[i].exit - processes[i].arrival;
+        waitingTime[i] = turnAroundTime[i] - processes[i].burst;
+    }
+
+    float avg[] = {0,0};
+    for (int i = 0; i < size; i++) {
+        printf("Pid : %d, Turn around time : %d, Waiting time : %d\n",processes[i].pid, turnAroundTime[i], waitingTime[i]);
+        avg[0] += waitingTime[i];
+        avg[1] += turnAroundTime[i];
+    }
+
+    avg[0] /= (float) size;
+    avg[1] /= (float) size;
+
+    printf("Average TAT : %f, WT : %f", avg[1], avg[0]);
+
+}
+
+int timeFrame;
+
+int incrementFrame(int val){
+    if(val % timeFrame == 0){
+        return 1;
+    }
+    val++;
+    return val;
+}
+
+int incrementCounter(int counter) {
+    if(counter % size == 0 ){
+        return 0;
+    }
+    counter++;
+    return counter;
+}
+
+
+
+void roundRobin(){
+    sortProcesses();
+    timeFrame = 3;
+    int count = 0;
+    int lock = 1;
+    for (int time = 1; time <= totalTime(); time++) {
+        if(lock == 0 || time % timeFrame == 0){
+            count = incrementCounter(count);
+            lock = 1;
+        }
+        else if(lock == 1){
+            if(processes[count].remaining > 0){
+                gantt[time] = processes[count].pid;
+                processes[count].remaining--;
+            }else{
+             lock = 0;
+            }
+        }
+        printGantt(time - 1, count);
+    }
+    printProcesses();
+}
+
+void runAppSJF(){
+    initProcesses();
+    sortProcesses();
+    initGantt();
+    SJFPreemptive();
+    calcMetrics();
+}
+
+void runAppRR(){
+    initProcesses();
+    sortProcesses();
+    initGantt();
+    roundRobin();
+    calcMetrics();
+}
+
+int main() {
+    runAppRR();
+    return 0;
+}
